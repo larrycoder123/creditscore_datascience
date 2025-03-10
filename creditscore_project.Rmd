@@ -1,0 +1,2471 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    toc: true
+    df_print: paged
+editor_options:
+  markdown:
+    wrap: 72
+---
+
+# Introduction
+
+## Project Overview
+
+The analysis in this project examines the factors influencing credit scores and the associated financial behaviors of individuals. The goal is to identify patterns and predictive indicators that influence an individual's credit score. The dataset used consists of 21 columns and 100,000 observations, offering comprehensive coverage of customer demographics, financial metrics, and payment behaviors. After cleaning and preparation, the refined dataset is utilized for analysis. Notably, all entries in the dataset are complete, ensuring that the analysis remains free from missing data and potential biases related to incomplete records.
+ 
+The research objectives focus on two primary goals. First, the aim is to develop accurate predictive models for estimating credit scores based on the available data. Second, key indicators are identified to explain why certain individuals receive a particular credit score and what actions can be taken to achieve a better rating. Understanding these underlying factors provides valuable insights for financial institutions, policymakers, and individuals seeking to maintain or improve their creditworthiness.
+ 
+To address these research questions, a comparative analysis of multiple modeling techniques is conducted:
+ 
+1. Multinomial Logistic Regression 
+2. Ordinal Logistic Regression 
+3. Decision Tree 
+4. Random Forest 
+
+Each of these models offers distinct strengths and approaches for handling complex datasets and predicting outcomes. To identify the best-performing model, various metrics such as Accuracy, Recall, Precision, and F1 Scores are compared.
+ 
+Overall, this study highlights the effectiveness of data-driven methods in understanding financial behavior and credit risk.
+
+## Import Dataset
+
+```{r}
+data <- read.csv("C:/Users/mihim/Desktop/Uni/R/Project/data/train.csv", header = TRUE, sep = ",")
+```
+
+**Objective**
+
+Create a machine learning model to classify a person into "Good",
+"Standard" or "Poor" credit score categories based on credit-related
+information.
+
+**Dataset used:**
+
+-   "Credit score classification" by Rohan Paris
+
+-   <https://www.kaggle.com/datasets/parisrohan/credit-score-classification>
+
+-   License: "CC0: Public Domain"
+
+**Dataset Information**
+
+-   train.csv
+
+    -   100000 observations
+    -   12500 people
+    -   8 observations per person (different months)
+
+We will use the train.csv file and do a 80/20 train test split.
+
+**The variables:**
+
+-   ID: Unique identifier for each entry in the dataset.
+
+-   Customer_ID: Identifier for each customer.
+
+-   Month: Month of data collection.
+
+-   Name: Name of the customer.
+
+-   Age: Age of the customer.
+
+-   SSN: Social Security Number of the customer.
+
+-   Occupation: Occupation of the customer.
+
+-   Annual_Income: Annual income of the customer.
+
+-   Monthly_Inhand_Salary: Monthly salary after deductions.
+
+-   Num_Bank_Accounts: Number of bank accounts the customer has.
+
+-   Num_Credit_Card: Number of credit cards the customer has.
+
+-   Interest_Rate: Interest rate applied on loans.
+
+-   Num_of_Loan: Number of loans the customer has.
+
+-   Type_of_Loan: Type of loan taken by the customer.
+
+-   Delay_from_due_date: Number of days delayed from due date for
+    payments.
+
+-   Num_of_Delayed_Payment: Number of delayed payments made by the
+    customer.
+
+-   Changed_Credit_Limit: Indicates if the credit limit has been
+    changed.
+
+-   Num_Credit_Inquiries: Number of credit inquiries made by the
+    customer.
+
+-   Credit_Mix: Mix of different types of credit accounts held by the
+    customer.
+
+-   Outstanding_Debt: Amount of outstanding debt.
+
+-   Credit_Utilization_Ratio: Ratio of credit used to credit available.
+
+-   Credit_History_Age: Age of credit history.
+
+-   Payment_of_Min_Amount: Indicates if minimum payment amount is met.
+
+-   Total_EMI_per_month: Total Equated Monthly Installment (EMI) paid by
+    the customer.
+
+-   Amount_invested_monthly: Amount invested monthly by the customer.
+
+-   Payment_Behaviour: Payment behavior of the customer.
+
+-   Monthly_Balance: Monthly balance in the account.
+
+-   Credit_Score: Target variable - credit score of the customer.
+
+```{r}
+head(data)
+colnames(data)
+```
+
+# Data Cleaning
+
+## Removing Columns
+
+We drop columns that are unnecessary or not useful for the model
+building:
+
+-   ID
+
+-   Month
+
+-   Name
+
+-   SSN
+
+-   Monthly_Inhand_Salary
+
+-   Type_of_Loan
+
+```{r}
+
+credit_data <- data[, c("Customer_ID","Age", "Occupation", "Annual_Income", "Num_Bank_Accounts", "Interest_Rate", "Num_of_Loan", "Delay_from_due_date", "Num_of_Delayed_Payment", "Changed_Credit_Limit", "Num_Credit_Inquiries", "Credit_Mix", "Outstanding_Debt", "Credit_Utilization_Ratio", "Credit_History_Age", "Payment_of_Min_Amount", "Total_EMI_per_month", "Amount_invested_monthly", "Payment_Behaviour", "Monthly_Balance", "Credit_Score")]
+
+df <- as.data.frame(credit_data)
+
+colSums(is.na(credit_data))
+
+nrow(df[duplicated(df), ])
+```
+
+## Encodings for NA values
+
+A table to display the 3 most frequent values for each column is helpful
+to find some encodings for NA values in the dataset.
+
+```{r}
+
+# Function to find the 3 most common values
+get_top_n_values <- function(column, n = 3) {
+  freq_table <- sort(table(column), decreasing = TRUE)
+  top_n <- names(freq_table)[1:min(n, length(freq_table))]
+  top_n <- c(top_n, rep(NA, n - length(top_n)))
+  return(top_n)
+}
+
+# Apply function to each column
+top_3_values <- lapply(df, get_top_n_values)
+
+# Create a data frame from these results
+result_table <- do.call(rbind, lapply(names(top_3_values), function(col) {
+  data.frame(
+    Column = col,
+    Top1 = top_3_values[[col]][1],
+    Top2 = top_3_values[[col]][2],
+    Top3 = top_3_values[[col]][3]
+  )
+}))
+
+print(result_table)
+
+```
+
+We found 6 encodings for NA values from this table:
+
+-   "" (Empty Strings)
+
+-   "-"
+
+-   "\_\_\_\_\_\_\_"
+
+-   "10000"
+
+-   "-333333333333333333333333333"
+
+-   "NM"
+
+Another one was detected from manual inspection:
+
+-   "!@9#%8"
+
+**These encodings are turned into the universal encoding NA.**
+
+```{r}
+
+df[df == ""] <- NA
+df[df == "_"] <- NA
+df[df == "!@9#%8"] <- NA
+df[df == "NM"] <- NA
+df[df == "_______"] <- NA
+df[df == "__10000__"] <- NA
+df[df == "__-333333333333333333333333333__"] <- NA
+
+colSums(is.na(df))
+
+```
+
+## Data Cleaning and Outlier Detection
+
+### Functions
+
+Before we start, it is helpful to create some functions which can be
+used in the cleaning and detection process.
+
+**Load Libraries**
+
+```{r}
+
+library(dplyr)
+library(ggplot2)
+library(patchwork)
+library(knitr)
+library(tibble)
+```
+
+#### sort_mostcommon
+
+This function processes a column in the dataset to count the occurrences
+of each unique value and sorts them in descending order by their counts.
+Here's the breakdown:
+
+1.  Count occurrences: The `count()` function groups the data by the
+    specified column and counts how often each unique value appears.
+
+2.  Sort results: The `arrange()` function orders the results by the
+    count (`n`) in descending order, and alphabetically (or naturally)
+    by the column values in case of ties.
+
+3.  Print output:
+
+    -   If the output format is LaTeX or HTML (e.g., for reports), only
+        the first 10 rows are displayed using `head()`.
+
+    -   Otherwise, the full result is printed.
+
+```{r}
+sort_mostcommon <- function(data, column_name) {
+  
+  # Sort by count
+  result <- data %>%
+      count(!!sym(column_name)) %>%
+      arrange(desc(n), !!sym(column_name))
+  
+  # Display table either full or first 10 for knitting 
+  if (is_latex_output() || is_html_output()) {
+    print(head(result, 10))
+  } else {
+    print(result)
+  }
+}
+
+```
+
+#### sort_nonnumeric
+
+This function, processes a column in the dataset to filter out
+non-numeric values, counts occurrences of each unique non-numeric value,
+and then sorts these counts in descending order.
+
+1.  Extract the column: The specified column is selected from the
+    dataset.
+
+2.  Filter non-numeric values: It checks if values in the column are
+    non-numeric. The `filter()` function retains only the non-numeric
+    rows.
+
+3.  Count occurrences: The `count()` function groups the non-numeric
+    values and counts their occurrences.
+
+4.  Sort results: The `arrange()` function orders the results by count
+    in descending order, and by the column values for ties.
+
+5.  Print output:
+
+    -   If the output format is LaTeX or HTML (e.g., for reports), only
+        the first 10 rows are shown using `head()`.
+
+    -   Otherwise, the entire result is printed.
+
+```{r}
+
+sort_nonnumeric <- function(data, column_name) {
+  
+  column <- data[[column_name]]
+  
+  # Filter Non Numeric Values and Sort by Count
+  result <- data %>%
+    filter(is.na(suppressWarnings(as.numeric(as.character(column))))) %>%
+    count(!!sym(column_name)) %>%
+    arrange(desc(n), !!sym(column_name))
+  
+  # Display table either full or first 10 for knitting
+  if (is_latex_output() || is_html_output()) {
+    print(head(result, 10))
+  } else {
+    print(result)
+  }
+}
+
+```
+
+#### find_outliers
+
+This function identifies outliers in a numeric column based on the
+interquartile range (IQR) method and visualizes the results using
+histograms. This is then used to appropriately set the multipliers and
+filter out the outliers in following steps. In the find_outliers and in
+the remove_outliers function remove_negatives can be specified. This is
+used, when negative values make no sense.
+
+1.  Input Validation: The column's values are extracted. If the column
+    is not numeric, the function stops with an error.
+
+2.  Remove `NA` values: Missing values (`NA`) are excluded before
+    proceeding.
+
+3.  Calculate IQR: The first (`Q1`) and third quartiles (`Q3`) are
+    computed. The IQR is derived as `Q3 - Q1`.
+
+4.  Determine Outlier Bounds:
+
+    -   The lower bound is `Q1 - multiplier × IQR` (or `0` if
+        `remove_negatives` is `TRUE`).
+
+    -   The upper bound is `Q3 + multiplier × IQR`.
+
+5.  Identify Outliers: Values outside the bounds are identified as
+    outliers. A table of unique outliers and their counts is created,
+    sorted by value.
+
+6.  Display Outlier Table:
+
+    -   If the output is LaTeX or HTML, only the first 10 rows are
+        displayed.
+
+    -   Otherwise, the full table is printed.
+
+7.  Plot Histograms:
+
+    -   Histograms are created for:
+
+        -   Values below the lower bound.
+
+        -   Values within bounds.
+
+        -   Values above the upper bound.
+
+    -   Because the scales on the y-achsis (counts) differ so much, we
+        opted to using 3 different histograms.
+
+    -   Red dashed lines indicate the bounds, with annotations for the
+        lower and upper limits.
+
+8.  Combine Plots:
+
+    -   All histograms are displayed side by side. For a compact
+        overview.
+
+```{r}
+
+find_outliers <- function(data, column_name, multiplier = 1.5, remove_negatives = TRUE){
+  
+  x <- data[[column_name]]
+  
+  if (!is.numeric(x)) {
+    stop("Input must be numeric")
+  }
+  
+  x <- x[!is.na(x)]  
+  
+  # Calculate IQR
+  Q1<-quantile(x,0.25, na.rm = TRUE)
+  Q3<-quantile(x,0.75, na.rm = TRUE)
+  IQR <- Q3 - Q1
+  
+  # Calculate Upper and Lower Bound
+  if (remove_negatives) {
+    lower <- 0
+  } else {
+    lower <- Q1 - multiplier * IQR
+  }
+  upper <- Q3 + multiplier * IQR
+  
+
+  # Create Outliers Table
+  outliers <- x[x < lower | x > upper]
+  outliers_table <- data.frame(Outliers = outliers) %>%
+    count(Outliers) %>%
+    arrange(Outliers) # Sort by value (ascending order)
+  
+  # Display table either full or first 10 for knitting
+  if (is_latex_output() || is_html_output()) {
+    print(head(outliers_table, 10))
+  } else {
+    print(outliers_table)
+  }  
+  
+  plots <- list()
+  
+  # Below lower bound Plot
+  if (any(x < lower)) {
+    below_lower <- x[x < lower]
+    plot_below <- ggplot(data.frame(Value = below_lower), aes(x = Value)) +
+      geom_histogram(
+        breaks = seq(min(below_lower), lower, length.out = nclass.Sturges(below_lower) + 1),
+        fill = "skyblue",
+        color = "black"
+      ) +
+      geom_vline(xintercept = lower, color = "red", linetype = "dashed", linewidth = 1.1) +
+      annotate("text", x = lower, y = 0, 
+               label = "Lower Bound", color = "red", vjust = -1, hjust = 1.1) +
+      labs(
+        title = "Lower Bound",
+        x = "Value",
+        y = "Frequency",
+        subtitle = paste(
+          "Values:", length(below_lower),"| Lower:", lower)
+      ) +
+      theme_minimal()
+    
+    plots[[length(plots) + 1]] <- plot_below
+  }
+  
+  # Within Bounds Plot
+  within_bounds <- x[x >= lower & x <= upper]
+  if (length(within_bounds) > 0) {
+    plot_within <- ggplot(data.frame(Value = within_bounds), aes(x = Value)) +
+      geom_histogram(
+        bins = nclass.Sturges(within_bounds),
+        fill = "skyblue",
+        color = "black"
+      ) +
+      geom_vline(xintercept = lower, color = "red", linetype = "dashed", linewidth = 0.5) +
+      geom_vline(xintercept = upper, color = "red", linetype = "dashed", linewidth = 0.5) +
+      labs(
+        title = "Within Bounds",
+        x = "Value",
+        y = "Frequency",
+        subtitle = paste(
+          "Values:", length(within_bounds)
+        )
+      ) +
+      theme_minimal()
+    
+    plots[[length(plots) + 1]] <- plot_within
+  }
+  
+  # Above Upper Bound Plot
+  if (any(x > upper)) {
+    above_upper <- x[x > upper]
+    plot_above <- ggplot(data.frame(Value = above_upper), aes(x = Value)) +
+      geom_histogram(
+        breaks = seq(upper, max(above_upper), length.out = nclass.Sturges(above_upper) + 1),
+        fill = "skyblue",
+        color = "black"
+      ) +
+      geom_vline(xintercept = upper, color = "red", linetype = "dashed", linewidth = 1.1) +
+      annotate("text", x = upper, y = 0, 
+               label = "Upper Bound", color = "red", vjust = -1, hjust = -0.1) +
+      labs(
+        title = "Upper Bound",
+        x = "Value",
+        y = "Frequency",
+        subtitle = paste(
+          "Values:", length(above_upper),"| Upper:", upper)
+      ) +
+      theme_minimal()
+    
+    plots[[length(plots) + 1]] <- plot_above
+  }
+  
+  # Display Plots next to each other
+  plots <- Filter(Negate(is.null), plots)
+  plot_number <- length(plots)
+  combined_plot <- wrap_plots(plots, ncol = plot_number) +
+    theme(plot.margin = margin(10, 10, 10, 10))
+  print(combined_plot)
+}
+
+```
+
+#### remove_outliers
+
+This function replaces outliers in a numeric column of a dataset with
+`NA`, based on the interquartile range (IQR) method. The parameters identified during the find_outliers phase through trial and error can be used.
+
+1.  Input Validation: The specified column is extracted from the
+    dataset. If the column is not numeric, the function halts with an
+    error.
+
+2.  Calculate IQR: Computes the first (`Q1`) and third quartiles (`Q3`)
+    using the `quantile()` function. The IQR is calculated as `Q3 - Q1`.
+
+3.  Define Outlier Bounds:
+
+    -   The lower bound is:
+
+        -   `Q1 - multiplier × IQR` (if `remove_negatives` is `FALSE`).
+
+        -   `0` (if `remove_negatives` is `TRUE` to avoid negative
+            bounds).
+
+    -   The upper bound is `Q3 + multiplier × IQR`.
+
+4.  Identify Outliers: Identifies values outside the lower and upper
+    bounds as outliers.
+
+5.  Print Process Details: Displays the lower and upper bounds and the
+    number of outliers removed.
+
+6.  Replace Outliers with `NA`: Outlier values are replaced with `NA` in
+    the column.
+
+7.  Return Updated Column: The function returns the modified column with
+    outliers replaced by `NA`.
+
+```{r}
+
+remove_outliers <- function(data, column_name, multiplier = 1.5, remove_negatives = TRUE){
+  
+  x <- data[[column_name]]
+  
+  if (!is.numeric(x)) {
+    stop("Input must be numeric")
+  }
+  
+  # Calculate IQR
+  Q1<-quantile(x,0.25, na.rm = TRUE)
+  Q3<-quantile(x,0.75, na.rm = TRUE)
+  IQR <- Q3 - Q1
+
+  # Calculate Upper and Lower Bound  
+  if (remove_negatives) {
+    lower <- 0
+  } else {
+    lower <- Q1 - multiplier * IQR
+  }
+  upper <- Q3 + multiplier * IQR
+  
+  # Print Information on Process
+  outliers <- x[!is.na(x) & (x < lower | x > upper)]
+  print(paste("Lower bound:", lower))
+  print(paste("Upper bound:", upper))
+  print(paste("Number of Outliers removed:", length(outliers)))
+  
+  # Turn outliers into NA
+  x[x < lower | x > upper] <- NA
+  
+  return(x)
+}
+
+```
+
+#### categorical_plot
+
+This function creates and displays a bar plot to visualize the
+distribution of values in a categorical column.
+
+1.  Bar Plot Creation: The column specified by `column_name` is set as
+    the x-axis variable.
+
+2.  Labels and Titles:
+
+    -   A descriptive title is added to the plot, indicating the column
+        being visualized.
+
+    -   X-axis and y-axis labels are set to the column name and "Count".
+
+3.  Axis Text Formatting: X-axis text labels are rotated 45 degrees for
+    better readability, especially when there are many unique values.
+
+4.  Display: The plot is printed to the output.
+
+```{r}
+
+categorical_plot <- function(data, column_name) {
+  
+  # Create a barplot for categorical variables
+  plot <- ggplot(data, aes(x = !!sym(column_name))) +
+    geom_bar(fill = "skyblue", color = "black") +
+    theme_minimal() +
+    labs(
+      title = paste("Distribution of", column_name),
+      x = column_name,
+      y = "Count"
+    ) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  
+  print(plot)
+}
+
+```
+
+**For each column we follow this or a similar process:**
+
+1.  display data
+2.  find abnomalies (weird characters...) and turn into NA
+3.  apply the correct datatype
+4.  find outliers
+5.  turn outliers into NaN values to process later
+6.  show distribution of data to confirm the cleaning process has been
+    successful
+
+The process will not be explained for each variable individually. Age
+functions as an example for the process. For the other variables the
+appropriate measures have been taken and can be seen from the code,
+plots and print statements.
+
+### Age
+
+```{r}
+
+sort_nonnumeric(df, "Age")
+sort_mostcommon(df, "Age")
+df$Age <- gsub("_", "", df$Age)
+df$Age <- as.numeric(df$Age)
+
+find_outliers(df, "Age", 2 , TRUE)
+df$Age <- remove_outliers(df, "Age", 2 , TRUE)
+boxplot(df$Age)
+
+```
+
+These three histograms illustrate the distribution of values of the
+column age categorized by their position relative to defined bounds.
+Each histogram provides a visual breakdown of the frequency of these
+values within three distinct groups: those falling below the lower
+bound, those within the bounds, and those exceeding the upper bound.
+
+1.  Lower Bound: The first histogram on the left represents values that
+    fall below the lower bound. A total of 886 values are below this
+    threshold, which is defined at 0 as indicated by the red line. The
+    histogram shows that these values are distributed primarily in the
+    negative range, with the majority clustering around the value -500.
+
+2.  Within Bounds: The histogram in the middle shows the distribution of
+    values that lie within the defined lower and upper bounds. There are
+    97 219 values in this category. The values range between 0 and 78,
+    as marked by the red dashed lines representing the lower and upper
+    bounds. The distribution is approximately bell-shaped, indicating
+    that most of the values are concentrated near the center of this
+    range,
+
+3.  Upper Bound: The third histogram on the right displays the values
+    exceeding the upper bound. A total of 1 895 values are greater than
+    the upper threshold, set at 78 (depicted by the red dashed line).
+    The histogram shows that these values extend significantly beyond
+    the threshold, reaching into much larger values.
+
+The information gathered from this is then used to specify the
+parameters in the remove_outliers function, which then replaces the
+outliers with NA values for further processing down the line.
+
+### Occupation
+
+```{r}
+
+sort_mostcommon(df, "Occupation")
+categorical_plot(df, "Occupation")
+
+```
+
+### Annual_Income
+
+```{r}
+
+sort_nonnumeric(df, "Annual_Income")
+sort_mostcommon(df, "Annual_Income")
+df$Annual_Income <- gsub("_", "", df$Annual_Income)
+df$Annual_Income <- as.numeric(df$Annual_Income)
+
+find_outliers(df, "Annual_Income", 2.5 , TRUE)
+df$Annual_Income <- remove_outliers(df, "Annual_Income", 2.5 , TRUE)
+boxplot(df$Annual_Income)
+
+```
+
+### Num_Bank_Accounts
+
+```{r}
+
+sort_nonnumeric(df, "Num_Bank_Accounts")
+sort_mostcommon(df, "Num_Bank_Accounts")
+df$Num_Bank_Accounts <- as.numeric(df$Num_Bank_Accounts)
+
+find_outliers(df, "Num_Bank_Accounts", 2.5 , TRUE)
+df$Num_Bank_Accounts <- remove_outliers(df, "Num_Bank_Accounts", 2.5 , TRUE)
+boxplot(df$Num_Bank_Accounts)
+
+```
+
+### Interest_Rate
+
+```{r}
+
+sort_nonnumeric(df, "Interest_Rate")
+sort_mostcommon(df, "Interest_Rate")
+df$Interest_Rate <- as.numeric(df$Interest_Rate)
+
+find_outliers(df, "Interest_Rate")
+df$Interest_Rate <- remove_outliers(df, "Interest_Rate")
+boxplot(df$Interest_Rate)
+
+```
+
+### Num_of_Loan
+
+```{r}
+
+sort_nonnumeric(df, "Num_of_Loan")
+sort_mostcommon(df, "Num_of_Loan")
+df$Num_of_Loan <- gsub("_", "", df$Num_of_Loan)
+df$Num_of_Loan <- as.numeric(df$Num_of_Loan)
+
+find_outliers(df, "Num_of_Loan")
+df$Num_of_Loan <- remove_outliers(df, "Num_of_Loan")
+boxplot(df$Num_of_Loan)
+
+```
+
+### Delay_from_due_date
+
+```{r}
+
+sort_nonnumeric(df, "Delay_from_due_date")
+sort_mostcommon(df, "Delay_from_due_date")
+df$Delay_from_due_date <- as.numeric(df$Delay_from_due_date)
+
+find_outliers(df, "Delay_from_due_date", 3)
+df$Delay_from_due_date <- remove_outliers(df, "Delay_from_due_date", 3)
+boxplot(df$Delay_from_due_date)
+
+```
+
+### Changed_Credit_Limit
+
+```{r}
+
+sort_nonnumeric(df, "Changed_Credit_Limit")
+sort_mostcommon(df, "Changed_Credit_Limit")
+df$Changed_Credit_Limit <- as.numeric(df$Changed_Credit_Limit)
+
+find_outliers(df, "Changed_Credit_Limit", 2.5, FALSE)
+boxplot(df$Changed_Credit_Limit)
+
+```
+
+### Num_of_Delayed_Payment
+
+```{r}
+
+sort_nonnumeric(df, "Num_of_Delayed_Payment")
+sort_mostcommon(df, "Num_of_Delayed_Payment")
+df$Num_of_Delayed_Payment <- gsub("_", "", df$Num_of_Delayed_Payment)
+df$Num_of_Delayed_Payment <- as.numeric(df$Num_of_Delayed_Payment)
+
+find_outliers(df, "Num_of_Delayed_Payment")
+df$Num_of_Delayed_Payment <- remove_outliers(df, "Num_of_Delayed_Payment")
+boxplot(df$Num_of_Delayed_Payment)
+
+```
+
+### Num_Credit_Inquiries
+
+```{r}
+
+sort_nonnumeric(df, "Num_Credit_Inquiries")
+sort_mostcommon(df, "Num_Credit_Inquiries")
+df$Num_Credit_Inquiries <- as.numeric(df$Num_Credit_Inquiries)
+
+find_outliers(df, "Num_Credit_Inquiries", 3)
+df$Num_Credit_Inquiries <- remove_outliers(df, "Num_Credit_Inquiries", 3)
+boxplot(df$Num_Credit_Inquiries)
+
+```
+
+### Credit_Mix
+
+```{r}
+
+sort_mostcommon(df, "Credit_Mix")
+categorical_plot(df, "Credit_Mix")
+
+```
+
+### Outstanding_Debt
+
+```{r}
+
+sort_nonnumeric(df, "Outstanding_Debt")
+sort_mostcommon(df, "Outstanding_Debt")
+df$Outstanding_Debt <- gsub("_", "", df$Outstanding_Debt)
+df$Outstanding_Debt <- as.numeric(df$Outstanding_Debt)
+
+find_outliers(df, "Outstanding_Debt", 2.5)
+boxplot(df$Outstanding_Debt)
+
+```
+
+### Credit_Utilization_Ratio
+
+```{r}
+
+sort_nonnumeric(df, "Credit_Utilization_Ratio")
+sort_mostcommon(df, "Credit_Utilization_Ratio")
+df$Credit_Utilization_Ratio <- as.numeric(df$Credit_Utilization_Ratio)
+
+find_outliers(df, "Credit_Utilization_Ratio")
+df$Credit_Utilization_Ratio <- remove_outliers(df, "Credit_Utilization_Ratio")
+boxplot(df$Credit_Utilization_Ratio)
+
+```
+
+### Credit_History_Age
+
+Currently the data is in a text format. For further analysis and model
+building, the time should be displayed in months (as a number).
+
+```{r}
+sort_mostcommon(df, "Credit_History_Age")
+
+library(stringr)
+# Change time into number of months
+df <- df %>%
+  mutate(
+    Credit_History_Age = as.numeric(str_extract(Credit_History_Age, "\\d+(?=\\sYears)")) * 12 +
+                         as.numeric(str_extract(Credit_History_Age, "\\d+(?=\\sMonths)"))
+  )
+
+sort_mostcommon(df, "Credit_History_Age")
+
+df$Credit_History_Age <- as.numeric(df$Credit_History_Age)
+find_outliers(df, "Credit_History_Age")
+
+boxplot(df$Credit_History_Age)
+
+```
+
+### Payment_of_Min_Amount
+
+```{r}
+
+sort_mostcommon(df, "Payment_of_Min_Amount")
+categorical_plot(df, "Payment_of_Min_Amount")
+
+```
+
+### Total_EMI_per_month
+
+```{r}
+
+sort_nonnumeric(df, "Total_EMI_per_month")
+sort_mostcommon(df, "Total_EMI_per_month")
+df$Total_EMI_per_month <- as.numeric(df$Total_EMI_per_month)
+
+find_outliers(df, "Total_EMI_per_month", 9)
+df$Total_EMI_per_month <- remove_outliers(df, "Total_EMI_per_month", 9)
+boxplot(df$Total_EMI_per_month)
+
+```
+
+### Amount_invested_monthly
+
+```{r}
+
+sort_nonnumeric(df, "Amount_invested_monthly")
+sort_mostcommon(df, "Amount_invested_monthly")
+df$Amount_invested_monthly <- as.numeric(df$Amount_invested_monthly)
+
+find_outliers(df, "Amount_invested_monthly",5)
+df$Amount_invested_monthly <- remove_outliers(df, "Amount_invested_monthly", 5)
+boxplot(df$Amount_invested_monthly)
+
+```
+
+### Payment_Behaviour
+
+```{r}
+sort_mostcommon(df, "Payment_Behaviour")
+categorical_plot(df, "Payment_Behaviour")
+
+```
+
+### Monthly_Balance
+
+```{r}
+
+sort_nonnumeric(df, "Monthly_Balance")
+sort_mostcommon(df, "Monthly_Balance")
+df$Monthly_Balance <- as.numeric(df$Monthly_Balance)
+
+find_outliers(df, "Monthly_Balance", 5)
+df$Monthly_Balance <- remove_outliers(df, "Monthly_Balance", 5)
+boxplot(df$Monthly_Balance)
+
+```
+
+### Credit_Score
+
+```{r}
+
+sort_mostcommon(df, "Credit_Score")
+categorical_plot(df, "Credit_Score")
+
+```
+
+## NA Imputation
+
+In all the columns that contain NA's the missing values have to be
+imputed.
+
+```{r}
+
+colSums(is.na(df))
+
+```
+
+**The dataset is special in this regard, because it contains the credit
+score values of multiple people. For each person there are 8 entries and
+they are identifiable by the Customer_ID. Missing values can be imputed
+on a per-customer basis, which helps maintain the integrity of the
+data.**
+
+Depending on the variable there are 2 options:
+
+Mean Imputation or Mode Imputation
+
+Following this procedure for each Customer_ID (Customer):
+
+1.  if all values are NA's -\> we drop the customer
+2.  for each customer we get either:
+    1.  the mean or
+    2.  the mode
+3.  we replace the NA with the imputation value
+
+Let's do this in code with functions for mean and mode imputation:
+
+```{r}
+
+library(dplyr)
+
+mean_impute <- function(data, column, rounding = FALSE) {
+  data <- data %>%
+    group_by(Customer_ID) %>%
+    filter(!all(is.na(!!sym(column)))) %>%
+    mutate(
+      !!sym(column) := if_else(
+        is.na(!!sym(column)),
+        if (rounding) round(mean(!!sym(column), na.rm = TRUE)) else mean(!!sym(column), na.rm = TRUE),
+        !!sym(column)
+      )
+    ) %>%
+    ungroup()
+  return(data)
+}
+
+mode_impute <- function(data, column) {
+  get_mode <- function(x) {
+    ux <- unique(na.omit(x))
+    ux[which.max(tabulate(match(x, ux)))]
+  }
+  
+  data <- data %>%
+    group_by(Customer_ID) %>%
+    filter(!all(is.na(!!sym(column)))) %>%
+    mutate(
+      !!sym(column) := if_else(
+        is.na(!!sym(column)),
+        get_mode(!!sym(column)),
+        !!sym(column)
+      )
+    ) %>%
+    ungroup()
+  return(data)
+}
+
+```
+
+### Mode Imputation
+
+For the Categorical variables mode imputation is the right method:
+
+-   Occupation
+
+-   Credit_Mix
+
+-   Payment_of_Min_Amount
+
+-   Payment_Behaviour
+
+```{r}
+
+df <- mode_impute(df, "Occupation")
+df <- mode_impute(df, "Credit_Mix")
+df <- mode_impute(df, "Payment_of_Min_Amount")
+df <- mode_impute(df, "Payment_Behaviour")
+
+```
+
+### Mean Imputation
+
+For the numeric variables we do mean imputation.
+
+**The integer values are kept as integer by rounding the resulting value:**
+
+-   Age
+
+-   Num_Bank_Accounts
+
+-   Num_of_Loan
+
+-   Delay_from_due_date
+
+-   Num_of_Delayed_Payment
+
+-   Num_Credit_Inquiries
+
+-   Credit_History_Age
+
+**For the other numeric variables, no rounding is needed:**
+
+-   Annual_Income
+
+-   Interest_Rate
+
+-   Changed_Credit_Limit Credit_Utilization_Ratio
+
+-   Total_EMI_per_month
+
+-   Amount_invested_monthly
+
+-   Monthly_Balance
+
+```{r}
+
+#with rounding
+df <- mean_impute(df, "Age", TRUE)
+df$Age <- as.integer(df$Age)
+df <- mean_impute(df, "Num_Bank_Accounts", TRUE)
+df$Num_Bank_Accounts <- as.integer(df$Num_Bank_Accounts)
+df <- mean_impute(df, "Num_of_Loan", TRUE)
+df$Num_of_Loan <- as.integer(df$Num_of_Loan)
+df <- mean_impute(df, "Delay_from_due_date", TRUE)
+df$Delay_from_due_date <- as.integer(df$Delay_from_due_date)
+df <- mean_impute(df, "Num_of_Delayed_Payment", TRUE)
+df$Num_of_Delayed_Payment <- as.integer(df$Num_of_Delayed_Payment)
+df <- mean_impute(df, "Num_Credit_Inquiries", TRUE)
+df$Num_Credit_Inquiries <- as.integer(df$Num_Credit_Inquiries)
+df <- mean_impute(df, "Credit_History_Age", TRUE)
+df$Credit_History_Age <- as.integer(df$Credit_History_Age)
+
+#without rounding (default = FALSE)
+df <- mean_impute(df, "Annual_Income")
+df <- mean_impute(df, "Interest_Rate")
+df <- mean_impute(df, "Changed_Credit_Limit")
+df <- mean_impute(df, "Credit_Utilization_Ratio")
+df <- mean_impute(df, "Total_EMI_per_month")
+df <- mean_impute(df, "Amount_invested_monthly")
+df <- mean_impute(df, "Monthly_Balance")
+
+```
+
+Let's check again, if all NA's were imputed...
+
+...and yes 0 NA's are left in the dataset.
+
+```{r}
+colSums(is.na(df))
+```
+
+## Data Preparation
+
+"Customer_ID" has done its job and can now be removed, as it is no
+longer needed.
+
+```{r}
+
+library(dplyr)
+
+df <- df %>% dplyr::select(-Customer_ID)
+
+```
+
+The categorical variables need to be turned into factors for further
+use. Some variable names are also shortened, with the changes visible in the code cell below.
+
+```{r}
+
+df_copy <- df
+
+# Factor Categorical Variables
+df$Occupation <- factor(df$Occupation)
+df$Credit_Mix <- factor(df$Credit_Mix, levels = c("Bad", "Standard", "Good"), labels = c("Poor", "Standard", "Good"))
+df$Payment_of_Min_Amount <- factor(df$Payment_of_Min_Amount)
+df$Payment_Behaviour <- factor(df$Payment_Behaviour, levels = c("Low_spent_Small_value_payments", "Low_spent_Medium_value_payments", "Low_spent_Large_value_payments","High_spent_Small_value_payments","High_spent_Medium_value_payments","High_spent_Large_value_payments"), labels = c("LowSpent_SmallValue", "LowSpent_MediumValue", "LowSpent_LargeValue", "HighSpent_SmallValue", "HighSpent_MediumValue", "HighSpent_LargeValue"))
+df$Credit_Score <- factor(df$Credit_Score, levels = c("Poor", "Standard", "Good"))
+
+# Change Column Names
+colnames(df) <- c("Age", 
+                  "Occupation", 
+                  "Annual_Income", 
+                  "Bank_Accounts",       # Num_Bank_Accounts
+                  "Interest_Rate", 
+                  "Loans",               # Num_of_Loan
+                  "Days_Delayed",        # Delay_from_due_date
+                  "Payments_Delayed",    # Num_of_Delayed_Payment
+                  "Credit_Limit_Change", # Changed_Credit_Limit
+                  "Credit_Inquiries",    # Num_Credit_Inquiries
+                  "Credit_Mix", 
+                  "Outstanding_Debt", 
+                  "Credit_Utilization",  # Credit_Utilization_Ratio
+                  "Credit_History",      # Credit_History_Age
+                  "Min_Payment",         # Payment_of_Min_Amount
+                  "Monthly_EMI",         # Total_EMI_per_month
+                  "Monthly_Invested",    # Amount_invested_monthly
+                  "Payment_Behaviour", 
+                  "Balance",             # Monthly_Balance
+                  "Credit_Score")
+
+str(df)
+```
+
+# Data Exploration and Visualization
+
+## Numeric Variables
+
+The initial focus is on numeric variables and the target variable (Credit_Score), which can be converted into numeric form by factoring and assigning ordinal levels.
+
+```{r}
+
+df_numeric <- df[, c("Age", "Annual_Income", "Bank_Accounts", "Interest_Rate", "Loans", "Days_Delayed", "Payments_Delayed", "Credit_Limit_Change", "Credit_Inquiries", "Outstanding_Debt", "Credit_Utilization", "Credit_History", "Monthly_EMI", "Monthly_Invested", "Balance", "Credit_Score")]
+
+df_numeric1 <- df_numeric
+
+# Credit_score is treated as a numeric variable
+df_numeric$Credit_Score <- as.numeric(factor(df_numeric$Credit_Score, levels = c("Poor", "Standard", "Good"), ordered = TRUE))
+
+
+str(df_numeric)
+str(df_numeric1)
+
+```
+
+### Distribution
+
+The distribution of the numeric variables within the three credit score levels is displayed here.
+
+```{r fig.width=12, fig.height=8}
+
+library(tidyr)
+library(ggplot2)
+
+df_long_numeric <- df_numeric1 %>%
+  pivot_longer(
+    cols = -Credit_Score,
+    names_to = "Variable",
+    values_to = "Value"
+  )
+
+ggplot(df_long_numeric, aes(x = Credit_Score, y = Value, fill = Credit_Score)) +
+  geom_boxplot(color = "black") +
+  scale_fill_manual(values = c("Poor" = "#F4A6A6", "Standard" = "#FCEB91", "Good" = "#A8E3A0")) +
+  facet_wrap(~Variable, scales = "free_y") + #facet for each variable
+  labs(
+    title = "Boxplots of Numeric Variables by Credit Score",
+    x = "Credit Score",
+    y = "Value"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 0, hjust = 0.5),
+    legend.position = "top"
+  )
+
+```
+
+The boxplots compare numeric variables across three credit score
+categories: **Poor (red)**, **Standard (yellow)**, and **Good (green)**,
+providing insights into financial behaviors.
+
+1.  **Age**:
+
+    -   Poor: Younger (median \~30s),
+
+    -   Standard: Mid-30s,
+
+    -   Good: Older (late 30s to early 40s).
+
+2.  **Annual Income**:
+
+    -   Poor: Lower incomes (\<50,000),
+
+    -   Standard: Moderate (\~60,000),
+
+    -   Good: Higher incomes (\>75,000, often exceeding 150,000).
+
+3.  **Balance**:
+
+    -   Poor: Lower balances (\<500),
+
+    -   Standard: Moderately higher (\~1,000),
+
+    -   Good: Highest balances (\~500+, sometimes \>1,500).
+
+4.  **Bank Accounts**:
+
+    -   Poor/Standard: 5–8 accounts,
+
+    -   Good: Fewer accounts (\~3–6).
+
+5.  **Credit History**:
+
+    -   Poor: Shorter histories (\<300),
+
+    -   Standard: \~300,
+
+    -   Good: Longest (300–400).
+
+6.  **Credit Inquiries**:
+
+    -   Poor: Frequent (\~10),
+
+    -   Standard: Fewer (\<10),
+
+    -   Good: Minimal (\<5).
+
+7.  **Credit Limit Change**:
+
+    -   Poor: High variability,
+
+    -   Standard: Moderate,
+
+    -   Good: Minimal changes.
+
+8.  **Credit Utilization**:
+
+    -   Poor: High (\>30%),
+
+    -   Standard: Moderate,
+
+    -   Good: Low (20–30%).
+
+9.  **Days Delayed**:
+
+    -   Poor: Significant delays (\~40 days),
+
+    -   Standard: Moderate (\<30 days),
+
+    -   Good: Minimal (10–20 days).
+
+10. **Interest Rates**:
+
+    -   Poor: Highest (20–25%),
+
+    -   Standard: Moderate (\~15%),
+
+    -   Good: Lowest (\~10%).
+
+11. **Loans**:
+
+    -   Poor: Most loans (\~5),
+
+    -   Standard: Fewer (\~4),
+
+    -   Good: Fewest (\<3).
+
+12. **Monthly EMI**:
+
+    -   Poor: High and variable,
+
+    -   Standard: Moderate,
+
+    -   Good: Lowest (\<200).
+
+13. **Monthly Invested**:
+
+    -   Poor: Low (\<300),
+
+    -   Standard: Moderate,
+
+    -   Good: Higher (\>1,000).
+
+14. **Outstanding Debt**:
+
+    -   Poor: Highest (\~2,000–3,000),
+
+    -   Standard: Moderate (\~2,000),
+
+    -   Good: Lowest (\<1,500).
+
+15. **Payments Delayed**:
+
+    -   Poor: Frequent delays (\~20),
+
+    -   Standard: Moderate (\~15),
+
+    -   Good: Minimal (\<10).
+
+**Summary**
+
+Individuals with Good credit scores show:
+
+-   Higher incomes, balances, and investments.
+
+-   Lower outstanding debt, credit utilization, payment delays, and
+    interest rates.
+
+Those with Poor credit scores have:
+
+-   Lower incomes and balances.
+
+-   Higher debt, frequent delays, credit inquiries, and utilization
+    rates.
+
+This highlights clear patterns of financial health and credit behavior
+across the credit score categories.
+
+### Heatmap
+
+```{r fig.width=10, fig.height=8}
+
+if (!requireNamespace("reshape2", quietly = TRUE)) {install.packages("reshape2")}
+library(reshape2)
+library(ggplot2)
+
+df_plotting <- df_numeric
+
+corr_matrix <- round(cor(df_plotting),2)
+melted_corr_mat <- melt(corr_matrix)
+
+melted_corr_mat <- melted_corr_mat[melted_corr_mat$Var1 != melted_corr_mat$Var2, ]
+lower_triangle <- melted_corr_mat[as.numeric(melted_corr_mat$Var1) >= as.numeric(melted_corr_mat$Var2), ]
+upper_triangle <- melted_corr_mat[as.numeric(melted_corr_mat$Var1) < as.numeric(melted_corr_mat$Var2), ]
+
+ggplot() +
+  geom_tile(data = melted_corr_mat, aes(x = Var1, y = Var2), fill = 'white', col = 'grey80', linewidth = 0.5, alpha = 0.4) +
+  geom_point(data = lower_triangle, aes(x = Var1, y = Var2, fill = value, size = abs(value)), shape = 22, color = "black") +
+  geom_text(data = upper_triangle, aes(x = Var1, y = Var2, label = sprintf("%.2f", value)), size = 3, color = "black") +
+  scale_fill_gradient2(
+    low = "firebrick2", high = "dodgerblue4", mid = "white",
+    midpoint = 0, limit = c(-1, 1), space = "Lab", name = "Correlation"
+  ) +
+  scale_size(range = c(1, 10), guide = "none") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+    axis.text = element_text(size = 8),
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_blank()
+  ) +
+  labs(
+    title = "Correlation Heatmap",
+    x = "", y = ""
+  ) 
+
+```
+
+This heatmap shows the correlation between the different variables. In
+order to answer our research question the variable that is the most
+interesting is "credit_score". The variable that has the most (negative)
+impact is interest_rate with a correlation of -0.49. The variable
+credit_inquiries is also "highly" negatively correlated with the credit
+score.
+
+## Categorical Variables
+
+```{r}
+
+
+df_categorical <- df[, c("Occupation", "Credit_Mix", "Min_Payment", "Payment_Behaviour", "Credit_Score")]
+
+str(df_categorical)
+
+```
+
+```{r fig.width=10, fig.height=8}
+
+library(ggplot2)
+library(tidyr)
+
+df_long_categorical <- df_categorical %>%
+  pivot_longer(
+    cols = -Credit_Score,
+    names_to = "Variable",
+    values_to = "Category"
+  )
+
+# Create the faceted barplot
+ggplot(df_long_categorical, aes(x = Category, fill = Credit_Score)) +
+  geom_bar(position = "fill", color = "black") +   # Proportional bars
+  facet_wrap(~Variable, scales = "free_x") +      # One facet per categorical variable
+  labs(
+    title = "Distribution of Credit Score Levels by Categorical Variables",
+    x = "Category",
+    y = "Distribution",
+    fill = "Credit Score"
+  ) +
+  scale_fill_manual(values = c("Poor" = "#F4A6A6", "Standard" = "#FCEB91", "Good" = "#A8E3A0")) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),  # Rotate x-axis labels for readability
+    legend.position = "top",                           # Place legend at the top
+    strip.text = element_text(size = 10, face = "bold"), # Improve facet labels
+    plot.title = element_text(hjust = 0.5)
+  )
+
+```
+
+This chart provides a visual breakdown of credit scores based on various
+categorical variables. The credit scores are divided into three
+categories: Poor, Standard, and Good. The visualization is organized
+into four distinct sections based on the variables Credit_Mix,
+Min_Payment, Occupation, and Payment_Behaviour.
+
+**Credit_Mix**
+
+-   The Poor credit mix category shows a large proportion of Poor credit
+    scores, with very few categorized as Good.
+
+-   The Standard credit mix category has a more balanced distribution,
+    with a substantial proportion of Standard and some Good credit
+    scores, but still a significant share of Poor scores.
+
+-   The Good credit mix category shows the majority of credit scores
+    falling into the Good category.
+
+**Min_Payment**
+
+-   Individuals who make the Minimum Payment have a higher proportion of
+    Poor credit scores and a smaller proportion of Good credit scores.
+
+-   Those who do not make the minimum payment also show a significant
+    proportion of Poor and Standard credit scores, but with a slightly
+    higher share of Good credit scores compared to those who make the
+    minimum payment.
+
+**Occupation**
+
+-   Across different occupations, the distribution of credit scores is
+    relatively consistent. Most occupations show a predominance of
+    Standard credit scores, followed by Poor scores, and a smaller
+    proportion of Good scores.
+
+-   Occupations such as Teacher, Musician, and Writer display a somewhat
+    higher proportion of Poor credit scores compared to other
+    professions like Engineer, Lawyer, or Doctor, which exhibit a
+    slightly larger share of Good credit scores.
+
+**Payment_Behaviour**
+
+-   For individuals with LowSpent behaviors, whether the purchase value
+    is Small, Medium, or Large, there is a consistent distribution with
+    Standard credit scores dominating, followed by Poor credit scores
+    and a smaller fraction of Good scores.
+
+-   Those with HighSpent behaviors (spending higher amounts) similarly
+    show predominance of Standard credit scores, but the distribution of
+    Poor and Good scores varies slightly, with Good scores being a bit
+    more prominent than in the LowSpent categories.
+
+# Model Building
+
+We will be building 4 models to classify a customer into the Credit
+Score categories.
+
+1.  Multinomial Logistic Regression
+
+2.  Ordinal Logistic Regression
+
+3.  Decision Tree (Pruned)
+
+4.  Random Forest
+
+## Train and Test Split
+
+```{r}
+
+set.seed(1234)
+n <- nrow(df)
+n1 <- 0.8*n
+ind <- sample(1:n, n1)
+train_data <- df[ind,]
+test_data <- df[-ind,]
+
+```
+
+## Baseline: Majority Classifier
+
+The baseline accuracy which the model should outperform is in this case
+53.1%, which is the case, when every observation gets classified as
+Standard, which is the majority Class.
+
+```{r}
+
+# Show the counts of each class
+class_counts <- table(train_data$Credit_Score)
+
+# Show the proportions of each class
+class_proportions <- prop.table(class_counts)
+
+class_proportions_df <- data.frame(
+  Class = names(class_proportions),
+  Proportion = as.numeric(class_proportions)
+)
+
+print(class_proportions_df)
+
+ggplot(class_proportions_df, aes(x = Class, y = Proportion, fill = Class)) +
+  geom_bar(stat = "identity") +
+  labs(
+    title = "Class Proportions",
+    x = "Class",
+    y = "Percentage"
+  ) +
+  theme_minimal() +
+  scale_y_continuous(labels = scales::percent) +
+  scale_fill_manual(values = c("Good" = "#77e0ab", "Poor" = "#e07777", "Standard" = "#e0d577"))
+
+```
+
+## Multinomial Logistic Regression
+
+Multinomial Logistic Regression is a statistical method used to classify
+a dependent variable with more than two categories. Here with "Credit
+Score" (Poor, Standard, Good). It predicts the likelihood of each
+category based on the values of multiple numeric and categorical
+predictor variables.
+
+Here's how it works:
+
+1.  Baseline Category: One category is chosen as the reference
+    (baseline). In this case, it's "Poor."
+
+2.  Log-Odds Comparison: The model calculates the log-odds (logarithm of
+    the odds) of being in each of the other categories (Standard, Good)
+    compared to the baseline.
+
+3.  Coefficients: It estimates coefficients for each predictor variable,
+    which represent how much the predictor increases or decreases the
+    log-odds of being in a category compared to the baseline.
+
+4.  Prediction: Using the coefficients, the model predicts probabilities
+    for each class (Poor, Standard, Good) for a given set of predictor
+    values. The class with the highest probability is chosen as the
+    prediction.
+
+In R `multinom()` automatically handles the baseline and estimates the
+coefficients for all predictors.
+
+This model is especially useful when the outcome has multiple
+categories, and you want to understand how predictors influence the
+likelihood of each class, which is what we want in this case.
+
+We also tried to do a stepwise with this model using
+`stepAIC(model_mlogit, direction = "both"),` but this only resulted in
+marginal improvements and took really long to calculate. That's why we
+left it out of this report.
+
+```{r}
+
+if (!requireNamespace("nnet", quietly = TRUE)) {install.packages("nnet")}
+if (!requireNamespace("MASS", quietly = TRUE)) {install.packages("MASS")}
+
+library(nnet)
+library(MASS)
+
+model_mlogit <- multinom(Credit_Score ~ ., data = train_data)
+
+#summary(model_mlogit)
+
+```
+
+## Ordinal Logistic Regression
+
+Ordinal Logistic Regression is used when the dependent variable has
+ordered categories, like here "Credit Score" (Poor \< Standard \< Good).
+Unlike Multinomial Logistic Regression, this model takes the order of
+the categories into account.
+
+1.  Ordered Categories: The model assumes that the categories have a
+    natural order (e.g., Poor \< Standard \< Good).
+
+2.  Cumulative Log-Odds: It calculates the cumulative log-odds of being
+    in a category *or below* it (e.g., Poor or Standard vs. Good).
+
+3.  Thresholds: The model estimates thresholds (cut-points) that define
+    where one category ends, and the next begins.
+
+4.  Predictor Effects: It estimates coefficients for each predictor
+    variable, showing how much they increase or decrease the likelihood
+    of being in a higher category.
+
+5.  Prediction: For a given set of predictor values, the model predicts
+    the probabilities of each category while respecting their order.
+
+In R code, using `polr()` and setting the `Credit_Score` as an ordered
+factor ensures the model knows the categories are ordinal. The
+`Hess = TRUE` option computes the Hessian matrix, which is useful for
+hypothesis testing and confidence intervals.
+
+This model is ideal when the response variable is ordinal, as it makes
+better use of the order information compared to models like Multinomial
+Logistic Regression.
+
+Same as above a stepwise model was tried, but it didn't yield and
+meaningful improvements other than 15 minutes of computing.
+
+**Preparing the data**
+
+```{r}
+
+train_data_ordered <- train_data
+test_data_ordered <- test_data
+
+# https://stackoverflow.com/questions/75892750/ordinal-logistic-regression-error-in-svdx-infinite-or-missing-values-in-x
+# > summary(model_ordinal) Fehler in svd(X) : unendliche oder fehlende Werte in 'x'
+train_data_ordered$Annual_Income <- train_data_ordered$Annual_Income / 1000
+test_data_ordered$Annual_Income <- test_data_ordered$Annual_Income / 1000
+
+train_data_ordered$Credit_Score <- factor(train_data_ordered$Credit_Score, levels = c("Poor", "Standard", "Good"), ordered = TRUE)
+test_data_ordered$Credit_Score <- factor(test_data_ordered$Credit_Score, levels = c("Poor", "Standard", "Good"), ordered = TRUE)
+```
+
+**Building the model**
+
+```{r}
+
+library(MASS)
+
+model_ordinal <- polr(Credit_Score ~ ., data = train_data_ordered, Hess = TRUE)
+#summary(model_ordinal)
+
+```
+
+## Decision Tree
+
+### Standard
+
+A Decision Tree is a simple and intuitive model that can be used for
+classification tasks, like here predicting "Credit Score" (Poor,
+Standard, Good). It works by splitting the data into smaller and smaller
+groups based on the predictor variables to make predictions.
+
+1.  Splitting the Data: The model starts at the top (the root) and
+    splits the data into groups using the predictor variables, choosing
+    splits that best separate the classes.
+
+2.  Rules at Each Node: At each split (node), a decision rule is
+    applied, like "Income \> 50,000?" or "Age \<= 35?" to divide the
+    data into branches.
+
+3.  Class Assignment: At the end of each branch (leaf), the model
+    assigns the most frequent class (e.g., Poor, Standard, or Good)
+    based on the data in that leaf.
+
+4.  Prediction: For a new observation, the model follows the decision
+    rules down the tree to assign it to a class.
+
+In R code, `rpart()` builds the decision tree using "class" mode, which
+is for classification tasks. The tree learns rules to classify "Credit
+Score" based on your predictor variables.
+
+Decision Trees are powerful because they are easy to interpret and
+handle both numeric and categorical variables. However, they can
+overfit, so pruning may be necessary for better generalization.
+
+```{r}
+
+if (!requireNamespace("rpart", quietly = TRUE)) {install.packages("rpart")}
+if (!requireNamespace("rpart.plot", quietly = TRUE)) {install.packages("rpart.plot")}
+
+library(rpart)
+library(rpart.plot)
+
+model_tree <- rpart(Credit_Score ~ ., data = train_data, method = "class")
+
+#summary(model_tree)
+
+```
+
+```{r}
+
+rpart.plot(model_tree)
+
+plotcp(model_tree)
+
+```
+
+**Decision Tree Graph**
+
+This decision tree graph visually represents a model that classifies
+outcomes into three categories: Poor, Standard, and Good based on
+various credit-related variables. Each node shows the classification
+split with probability scores and the percentage of samples falling into
+each category. The splits are determined by conditions related to
+variables like Outstanding_Debt, Credit_Limit_Change, Credit_Mix,
+Interest_Rate, and Days_Delayed.
+
+-   Root Node:
+
+    -   Majority class: Standard (53%).
+
+    -   Split based on Outstanding Debt ≥ 1497.
+
+-   Left Branch (Debt ≥ 1497):
+
+    -   High debt increases likelihood of Poor credit score.
+
+    -   Further split: Credit Limit Change \< 15.
+
+        -   Credit Limit Change \< 15 → Poor (73%).
+
+        -   Credit Limit Change ≥ 15 → More Standard (48%).
+
+-   Right Branch (Debt \< 1497):
+
+    -   Standard (60%) dominates.
+
+    -   Split on Credit Mix = Standard:
+
+        -   Interest Rate ≥ 21 → Poor (78%).
+
+        -   Interest Rate \< 21 → Standard (86%).
+
+    -   Days Delayed ≥ 17 → Higher chance of Good (37%).
+
+Summary:
+
+-   High Outstanding Debt (≥ 1497) → Poor credit score.
+
+-   Low Outstanding Debt combined with Credit Mix or Days Delayed
+    increases the likelihood of Standard or Good credit scores.
+
+-   Important variables: Outstanding Debt, Credit Limit Change, Interest
+    Rate, Days Delayed.
+
+### Pruned
+
+In this case pruning did not improve the results, because the pruned
+tree is identical to the original Tree.
+
+```{r}
+
+optimal_cp <- model_tree$cptable[which.min(model_tree$cptable[,"xerror"]), "CP"]
+print(optimal_cp)
+
+model_tree_pruned <- prune(model_tree, cp = optimal_cp)
+```
+
+## Random Forest
+
+Random Forest is an ensemble model that builds multiple decision trees
+to improve classification accuracy and reduce overfitting. It can handle
+both numeric and categorical predictors.
+
+1.  Multiple Trees:\
+    The model builds many decision trees using random subsets of the
+    data and predictor variables.
+
+2.  Voting for Prediction:\
+    For classification (like Credit Score), each tree predicts a class
+    (Poor, Standard, Good). The final prediction is the class with the
+    most votes.
+
+3.  Probability Estimates:\
+    By setting `probability = TRUE`, the model outputs the probabilities
+    for each class (e.g., 70% Poor, 20% Standard, 10% Good).
+
+4.  Variable Importance:\
+    With `importance = "permutation"`, the model calculates how much
+    each predictor variable contributes to the accuracy of the
+    predictions.
+
+In R code, `ranger()` builds the Random Forest model efficiently for the
+Credit Score prediction task.
+
+```{r}
+
+if (!requireNamespace("ranger", quietly = TRUE)) {install.packages("ranger")}
+library(ranger)
+
+set.seed(1234)
+model_randomforest <- ranger(Credit_Score ~ ., data = train_data, probability = TRUE, importance = "permutation")
+
+#summary(model_randomforest)
+```
+
+### Importance Scores
+
+The importance scores in a Random Forest measure how much each predictor
+variable contributes to the model's accuracy. Higher scores indicate
+that a variable plays a larger role in correctly predicting the target
+outcome by improving splits across the trees.
+
+The results will be discussed further down the line.
+
+```{r}
+library(dplyr)
+
+importance_forest <- importance(model_randomforest)
+
+importance_table <- data.frame(
+  Variable = names(importance_forest),
+  Importance = as.numeric(importance_forest)
+)
+
+importance_table <- importance_table %>%
+  arrange(desc(Importance))
+
+importance_table
+
+```
+
+# Model Evaluation
+
+For model evaluation we use the accuracy and macro average the
+precision, recall and f1 scores, because the results are not binary.
+Also the confusion matrix will be displayed for each model.
+
+## Multinomial Logistic Regression
+
+```{r}
+
+predicted_mlogit <- predict(model_mlogit, newdata = test_data, type = "class")
+
+# Confusion matrix
+mlogit_confmatrix <- table(Predicted = predicted_mlogit, Actual = test_data$Credit_Score)
+
+# Accuracy
+accuracy_mlogit <- mean(predicted_mlogit == test_data$Credit_Score)
+
+# Precision for each class
+precision_per_class <- diag(mlogit_confmatrix) / rowSums(mlogit_confmatrix)
+
+# Recall for each class
+recall_per_class <- diag(mlogit_confmatrix) / colSums(mlogit_confmatrix)
+
+# F1-Score for each class
+f1_per_class <- 2 * (precision_per_class * recall_per_class) / (precision_per_class + recall_per_class)
+
+# Macro-averaged scores
+precision_mlogit <- mean(precision_per_class, na.rm = TRUE)
+recall_mlogit <- mean(recall_per_class, na.rm = TRUE)
+F1_mlogit <- mean(f1_per_class, na.rm = TRUE)
+
+mlogit_results <- data.frame(
+  Metric = c("Accuracy", "Precision", "Recall", "F1 Score"),
+  Value = c(accuracy_mlogit, precision_mlogit, recall_mlogit, F1_mlogit)
+)
+
+print(mlogit_confmatrix)
+print(mlogit_results)
+
+```
+
+-   Accuracy: 65.9% - The model correctly predicts the Credit Score
+    65.9% of the time.
+
+-   Precision: 63.5% - When the model predicts a class, 63.5% of those
+    predictions are correct.
+
+-   Recall: 65.5% - The model captures 65.5% of all actual cases across
+    the classes.
+
+-   F1 Score: 63.7% - A balance between precision and recall, indicating
+    moderate performance.
+
+**Justification**:
+
+Multinomial Logistic Regression works well for classifying multiple
+categories but assumes a linear relationship between predictors and
+log-odds. The moderate scores suggest the model is capturing some
+patterns but struggles with complex relationships or overlaps between
+classes like "Standard" and "Good". This may explain why accuracy and
+recall are only moderately high.
+
+## Ordinal Logistic Regression
+
+```{r}
+
+predicted_ordinal <- predict(model_ordinal, newdata = test_data_ordered, type = "class")
+
+# Confusion matrix
+ordinal_confmatrix <- table(Predicted = predicted_ordinal, Actual = test_data_ordered$Credit_Score)
+
+# Accuracy
+accuracy_ordinal <- mean(as.character(predicted_ordinal) == as.character(test_data_ordered$Credit_Score))
+
+# Precision for each class
+precision_per_class_ordinal <- diag(ordinal_confmatrix) / rowSums(ordinal_confmatrix)
+
+# Recall for each class
+recall_per_class_ordinal <- diag(ordinal_confmatrix) / colSums(ordinal_confmatrix)
+
+# F1-Score for each class
+f1_per_class_ordinal <- 2 * (precision_per_class_ordinal * recall_per_class_ordinal) / 
+                        (precision_per_class_ordinal + recall_per_class_ordinal)
+
+# Macro-averaged scores
+precision_ordinal <- mean(precision_per_class_ordinal, na.rm = TRUE)
+recall_ordinal <- mean(recall_per_class_ordinal, na.rm = TRUE)
+F1_ordinal <- mean(f1_per_class_ordinal, na.rm = TRUE)
+
+ordinal_results <- data.frame(
+  Metric = c("Accuracy", "Precision", "Recall", "F1 Score"),
+  Value = c(accuracy_ordinal, precision_ordinal, recall_ordinal, F1_ordinal)
+)
+
+print(ordinal_confmatrix)
+print(ordinal_results)
+
+```
+
+-   Accuracy: 63.2% - The model correctly predicts the Credit Score
+    63.2% of the time.
+
+-   Precision: 61.3% - When the model predicts a class, 61.3% of those
+    predictions are correct.
+
+-   Recall: 53.0% - The model captures just over half of the actual
+    cases, showing a weaker ability to identify all true instances.
+
+-   F1 Score: 54.5% - A lower balance between precision and recall
+    compared to Multinomial Logistic Regression.
+
+**Justification**:
+
+Ordinal Logistic Regression takes the order of classes into account
+(Poor \< Standard \< Good), which simplifies the relationships but may
+reduce flexibility. The lower recall suggests the model struggles to
+correctly classify all actual instances, especially in the middle
+"Standard" class, where boundaries are harder to distinguish. It
+performs slightly worse overall compared to Multinomial Logistic
+Regression.
+
+## Decision Tree (Standard / Pruned)
+
+Standard is identical to pruned.
+
+```{r}
+
+predicted_tree <- predict(model_tree, newdata = test_data, type = "class")
+predicted_tree_pruned <- predict(model_tree_pruned, newdata = test_data, type = "class")
+
+identical(predicted_tree, predicted_tree_pruned)
+
+```
+
+```{r}
+
+predicted_tree <- predict(model_tree, newdata = test_data, type = "class")
+
+# Confusion matrix
+tree_confmatrix <- table(Predicted = predicted_tree, Actual = test_data$Credit_Score)
+
+# Accuracy
+accuracy_tree <- mean(as.character(predicted_tree) == as.character(test_data$Credit_Score))
+
+# Precision for each class
+precision_per_class_tree <- diag(tree_confmatrix) / rowSums(tree_confmatrix)
+
+# Recall for each class
+recall_per_class_tree <- diag(tree_confmatrix) / colSums(tree_confmatrix)
+
+# F1-Score for each class
+f1_per_class_tree <- 2 * (precision_per_class_tree * recall_per_class_tree) / 
+                     (precision_per_class_tree + recall_per_class_tree)
+
+# Macro-averaged scores
+precision_tree <- mean(precision_per_class_tree, na.rm = TRUE)
+recall_tree <- mean(recall_per_class_tree, na.rm = TRUE)
+F1_tree <- mean(f1_per_class_tree, na.rm = TRUE)
+
+tree_results <- data.frame(
+  Metric = c("Accuracy", "Precision", "Recall", "F1 Score"),
+  Value = c(accuracy_tree, precision_tree, recall_tree, F1_tree)
+)
+
+print(tree_confmatrix)
+print(tree_results)
+
+```
+
+-   Accuracy: 68.8% - The model correctly predicts the Credit Score
+    68.8% of the time.
+
+-   Precision: 66.0% - When the model predicts a class, 66.0% of those
+    predictions are correct.
+
+-   Recall: 69.5% - The model captures a higher proportion of actual
+    cases compared to previous models.
+
+-   F1 Score: 66.9% - A good balance between precision and recall,
+    slightly better than the logistic regression models.
+
+**Justification**:
+
+Decision Trees split the data into smaller groups based on rules, which
+allows them to capture non-linear relationships and interactions between
+variables effectively. The higher recall indicates the model is better
+at identifying actual instances across classes, although precision
+remains moderate. This suggests the tree is flexible but may overfit
+slightly, leading to good but not perfect generalization.
+
+## Random Forest
+
+Because the random forest gives probabilities as an outcome, firstly the class with the highest probability
+needs to found and then a confusion matrix can be created the.
+
+```{r}
+
+predicted_forest_prob <- predict(model_randomforest, data = test_data)$predictions
+
+# Get the class with the highest probability
+predicted_forest_class <- apply(predicted_forest_prob, 1, which.max)
+predicted_forest_class <- factor(predicted_forest_class, levels = c(1, 2, 3), labels = c("Poor", "Standard", "Good"))
+
+# Confusion matrix
+forest_confmatrix <- table(Predicted = predicted_forest_class, Actual = test_data$Credit_Score)
+
+# Accuracy
+accuracy_forest <- mean(predicted_forest_class == test_data$Credit_Score)
+
+# Precision for each class
+precision_per_class_forest <- diag(forest_confmatrix) / rowSums(forest_confmatrix)
+
+# Recall for each class
+recall_per_class_forest <- diag(forest_confmatrix) / colSums(forest_confmatrix)
+
+# F1-Score for each class
+f1_per_class_forest <- 2 * (precision_per_class_forest * recall_per_class_forest) / 
+                       (precision_per_class_forest + recall_per_class_forest)
+
+# Macro-averaged scores
+precision_forest <- mean(precision_per_class_forest, na.rm = TRUE)
+recall_forest <- mean(recall_per_class_forest, na.rm = TRUE)
+F1_forest <- mean(f1_per_class_forest, na.rm = TRUE)
+
+forest_results <- data.frame(
+  Metric = c("Accuracy", "Precision", "Recall", "F1 Score"),
+  Value = c(accuracy_forest, precision_forest, recall_forest, F1_forest)
+)
+
+print(forest_confmatrix)
+print(forest_results)
+
+```
+
+-   Accuracy: 81.2% - The model correctly predicts the Credit Score
+    81.2% of the time, significantly higher than previous models.
+
+-   Precision: 79.9% - When the model predicts a class, 79.9% of those
+    predictions are correct.
+
+-   Recall: 80.5% - The model captures a large proportion of actual
+    cases, showing strong coverage.
+
+-   F1 Score: 80.2% - A well-balanced score combining precision and
+    recall, indicating overall strong performance.
+
+**Justification**:
+
+Random Forest outperforms the other models because it combines multiple
+decision trees to reduce overfitting and improve generalization. By
+aggregating predictions (voting), it captures complex relationships
+between variables while maintaining robustness. The high scores across
+all metrics confirm its strength in handling the classification task
+effectively.
+
+## Overview
+
+```{r}
+
+model_results <- data.frame(
+  Model = c(
+    "Multinomial Logistic Regression", 
+    "Ordinal Logistic Regression", 
+    "Decision Tree", 
+    "Random Forest"
+  ),
+  Accuracy = c(
+    accuracy_mlogit, 
+    accuracy_ordinal,
+    accuracy_tree, 
+    accuracy_forest
+  ),
+  Precision = c(
+    precision_mlogit, 
+    precision_ordinal, 
+    precision_tree, 
+    precision_forest
+  ),
+  Recall = c(
+    recall_mlogit, 
+    recall_ordinal, 
+    recall_tree, 
+    recall_forest
+  ),
+  F1_Score = c(
+    F1_mlogit, 
+    F1_ordinal,
+    F1_tree, 
+    F1_forest
+  )
+)
+
+print(model_results)
+
+```
+
+```{r}
+
+library(tidyr)
+library(ggplot2)
+
+# Reshape the data frame to long format to display individually
+model_results_long <- model_results %>%
+  pivot_longer(
+    cols = c(Accuracy, Precision, Recall, F1_Score), 
+    names_to = "Metric", 
+    values_to = "Value"
+  )
+
+custom_colors <- c(
+  "Accuracy" = "#A7C7E7",
+  "Precision" = "#B5EAD7",
+  "Recall" = "#FFFACD",
+  "F1_Score" = "#FFC8DD"
+)
+
+ggplot(model_results_long, aes(x = Model, y = Value, fill = Metric)) +
+  geom_bar(stat = "identity", position = "dodge", color = "black", linewidth = 0.2) +
+  labs(
+    title = "Model Performance Comparison",
+    x = "Models",
+    y = "Metric Value"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    legend.title = element_text(face = "bold")
+  ) +
+  scale_fill_manual(values = custom_colors) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1))
+```
+
+Let's compare the models accuracy to the baseline we have
+established before using a majority classifier.
+
+```{r}
+
+library(ggplot2)
+
+model_names <- c(
+  "Baseline Accuracy",
+  "Multinomial Logistic Regression", 
+  "Ordinal Logistic Regression", 
+  "Decision Tree", 
+  "Random Forest"
+)
+
+accuracies <- c(
+  0.531,  # Baseline accuracy
+  accuracy_mlogit, 
+  accuracy_ordinal,
+  accuracy_tree, 
+  accuracy_forest
+)
+
+accuracy_data <- data.frame(
+  Model = factor(model_names, levels = model_names),
+  Accuracy = accuracies
+)
+
+ggplot(accuracy_data, aes(x = Model, y = Accuracy, fill = Model)) +
+  geom_bar(stat = "identity", width = 0.7, color = "black") +
+  scale_fill_manual(values = c("gray", rep("skyblue", length(model_names) - 1))) +
+  labs(
+    title = "Model Accuracies vs Baseline",
+    x = "Model",
+    y = "Accuracy"
+  ) +
+  geom_hline(yintercept = 0.531, linetype = "dashed", color = "red", linewidth = 0.8, alpha = 0.7) +
+  theme_minimal(base_size = 12) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), plot.title = element_text(hjust = 0.5)) +
+  scale_y_continuous(labels = scales::percent)+
+  theme(
+    plot.title = element_text(hjust = 0.5)
+  )
+
+```
+
+We can see that all models are better than the baseline.
+
+# Final Model and Predictors
+
+## Final Model
+
+The **Random Forest model** should be chosen as the final model because
+it achieves the highest accuracy (81.2%) and consistently strong
+performance across all metrics (Precision: 79.9%, Recall: 80.5%, F1
+Score: 80.2%). Its ability to combine multiple decision trees allows it
+to capture complex relationships in the data while reducing overfitting,
+making it more robust and reliable for predicting the Credit Score
+compared to simpler models like logistic regression or a single decision
+tree.
+
+## Important Predictors
+
+Let's take a look at the important predictors determined by the
+random forest model using the importance scores.
+
+```{r}
+
+library(ggplot2)
+
+ggplot(importance_table, aes(x = reorder(Variable, Importance), y = Importance)) +
+  geom_bar(stat = "identity", fill = "skyblue", color = "black") +
+  coord_flip() +
+  labs(
+    title = "Variable Importance",
+    x = "Variables",
+    y = "Importance"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5)
+  )
+
+```
+
+**Interpretation**
+
+The model relies most on Credit Mix, Outstanding Debt, and Interest Rate
+to predict Credit Score, emphasizing the importance of debt management
+and credit diversity in determining creditworthiness.
+
+1.  Top Variables:
+
+    -   Credit_Mix, Outstanding_Debt, and Interest_Rate are the most
+        important predictors.
+
+        -   Credit_Mix contributes the most, indicating it strongly
+            influences the prediction of Credit Score.
+
+        -   Outstanding_Debt and Interest_Rate are key financial factors
+            that also significantly impact predictions.
+
+2.  Moderately Important Variables:
+
+    -   Days_Delayed, Credit_History, and Annual_Income also play a
+        substantial role, highlighting the importance of payment
+        behavior and financial stability.
+
+3.  Lower Importance Variables:
+
+    -   Variables like Balance, Monthly_Invested, and Credit_Utilization
+        contribute less, suggesting they have minimal influence on the
+        model's performance.
+
+## Comparison to reallife predictors
+
+**Source**
+
+The source of the credit score calculation information is
+**Investopedia**, a trusted financial education website. You can find
+the full explanation here:
+
+[**Credit Score Calculation on
+Investopedia**](https://www.investopedia.com/ask/answers/05/creditscorecalculation.asp).
+
+It outlines how credit scores (like FICO scores) are calculated using
+five main components: Payment History (35%), Amount Owed (30%), Length
+of Credit History (15%), New Credit (10%), and Credit Mix (10%).
+
+**Comparing the predictors to the real deal**
+
+We will categorize the predictor variables into the categories provided
+by the source:
+
+1.  Payment History (35%):
+
+    -   Delay_from_due_date: Number of days delayed for payments.
+
+    -   Num_of_Delayed_Payment: Total delayed payments.
+
+    -   Payment_of_Min_Amount: Indicates if the minimum payment was
+        made.
+
+    -   Payment_Behaviour: Overall payment behavior.
+
+2.  Amount Owed (30%):
+
+    -   Outstanding_Debt: Total outstanding debt.
+
+    -   Credit_Utilization_Ratio: Credit used relative to available
+        credit.
+
+    -   Num_of_Loan: Number of active loans.
+
+    -   Changed_Credit_Limit: Change in credit limits.
+
+    -   Total_EMI_per_month: Total monthly installment payments.
+
+3.  Length of Credit History (15%):
+
+    -   Credit_History_Age: Age of credit history.
+
+4.  New Credit (10%):
+
+    -   Num_Credit_Inquiries: Number of recent credit inquiries.
+
+5.  Credit Mix (10%):
+
+    -   Credit_Mix: Mix of different types of credit accounts.
+
+6.  Other (Not Used in Real-Life Calculation):
+
+    -   Age: Age of the customer.
+
+    -   Occupation: Occupation type.
+
+    -   Annual_Income: Annual income.
+
+    -   Num_Bank_Accounts: Number of bank accounts.
+
+    -   Num_Credit_Card: Number of credit cards.
+
+    -   Amount_invested_monthly: Monthly investments.
+
+    -   Monthly_Balance: Remaining monthly balance.
+
+**Results**
+
+-   Key predictors like Payment History, Outstanding Debt, Credit Mix,
+    and Credit Inquiries align closely with real-life credit score
+    factors. This explains why variables such as Credit_Mix,
+    Outstanding_Debt, and Interest_Rate are among the most important in
+    the Random Forest model.
+
+-   Real-world credit scoring models emphasize payment behavior and debt
+    levels (65% combined weight). Variables like Delay_from_due_date,
+    Outstanding_Debt, and Credit_Utilization_Ratio capture these
+    critical components, making the model effective.
+
+-   Credit Mix being highly important in both real life and the model
+    highlights its strong predictive power.
+
+-   Variables like Age and Income, though not used in real-world credit
+    scores, may help improve predictions in the dataset. For instance,
+    Annual_Income can indirectly influence creditworthiness even if it’s
+    not part of FICO scoring.
+
+# Summary
+
+## Overview
+
+As stated in the beginning the objective of this report was the
+following:
+
+"Create a machine learning model to classify a person into "Good",
+"Standard" or "Poor" credit score categories based on credit-related
+information."
+
+This was successfully accomplished through the following steps:
+
+-   **Extensive Data Cleaning and Preparation**:\
+    Ensuring the data was suitable for modeling, including handling
+    missing values and transforming variables.
+
+-   **Model Comparison**:\
+    Four models were compared — Multinomial Logistic Regression, Ordinal
+    Logistic Regression, Decision Tree, and Random Forest. The Random
+    Forest model was chosen as the final model due to its superior
+    performance, achieving an accuracy of 81% along with strong
+    precision, recall, and F1 scores.
+
+-   **Variable Importance Analysis**:\
+    Key variables such as Credit Mix, Outstanding Debt, and Interest
+    Rate were identified as the most important predictors, aligning
+    closely with real-life credit scoring factors.
+
+## Suggestions for further improvements
+
+To further enhance our credit score prediction models, several
+strategies could be explored:
+
+1.  **Additional Data Sources**:\
+    Integrate new datasets and information to capture a broader picture
+    of financial behavior:
+
+    -   Internet of Things (IoT): Data from connected devices, such as
+        smart payment tools or spending habits through wearable tech,
+        could provide insights and give our customers a realtime
+        adjustment to their credit score via an app.
+
+    -   Transaction Data: Detailed bank transaction histories or
+        spending categories (e.g., groceries, utilities, luxury items)
+        can help differentiate financial health across credit score
+        groups.
+
+    -   Lifestyle Indicators: Include data like utility bill payments,
+        rental histories, or subscription behaviors, which are not
+        traditionally included but can reflect financial responsibility.
+
+2.  **Feature Engineering**:\
+    Create new variables that reveal complex relationships in the data,
+    such as:
+
+    -   Debt-to-Income Ratio: Ratio of outstanding debt to annual
+        income.
+
+    -   Payment Timeliness Index: Average days delayed divided by total
+        credit history.
+
+    -   Utilization Trends: Changes in credit utilization ratio over
+        time.
+
+3.  **Hyperparameter Tuning**:\
+    Fine-tune Random Forest and other models using methods like grid
+    search or Bayesian optimization to optimize key parameters (e.g.,
+    tree depth, number of trees).
+
+4.  **Ensemble Methods**:\
+    Explore advanced ensemble techniques such as:
+
+    -   Gradient Boosting (e.g., XGBoost, LightGBM): Effective for
+        handling complex, non-linear relationships in large datasets.
+
+    -   Stacking: Combine predictions from multiple models to enhance
+        performance.
+
+5.  **Data Augmentation**:\
+    Collect or simulate additional credit-related data to improve model
+    generalization, including:
+
+    -   Loan-Specific Features: Loan types (e.g., mortgage, student,
+        auto), interest rates, and loan tenures.
+
+    -   Behavioral Insights: Spending patterns, saving habits, or
+        investment frequency.
