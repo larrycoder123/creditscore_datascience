@@ -1,3 +1,4 @@
 Classifies customers into poor / standard / good credit categories and examines the factors linked to credit quality. Benchmarks logistic and tree-based models and summarizes per-class performance.
 - Docs: see project_overview.pdf for setup, metrics, and takeaways.
-- Code: see the code/ folde
+- Code: see the code/ folder
+- Report: Knitted Code / Report under: https://larrycoder123.github.io/creditscore_datascience/code/creditscore_project.html
